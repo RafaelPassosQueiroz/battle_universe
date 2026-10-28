@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Hood and shoulders: the same green and frontal silhouette used by Doom in the app. -->
+    <path android:fillColor="#06110D"
+        android:pathData="M54,13 C31,14 18,31 17,55 L19,87 Q27,101 54,104 Q81,101 89,87 L91,55 C90,31 77,14 54,13 Z" />
+    <path android:fillColor="#20733F"
+        android:pathData="M54,16 C34,17 22,32 21,55 L23,86 Q34,96 54,99 Q74,96 85,86 L87,55 C86,32 74,17 54,16 Z" />
+    <path android:fillColor="#2F9450"
+        android:pathData="M54,17 C37,18 26,32 25,53 Q29,37 43,27 Q50,21 54,17 Z" />
+    <path android:fillColor="#0D3421"
+        android:pathData="M54,20 C38,21 28,36 28,56 L30,84 Q39,91 54,92 Q69,91 78,84 L80,56 C80,36 70,21 54,20 Z" />
+    <path android:fillColor="#59BA71"
+        android:pathData="M24,84 Q37,95 54,95 Q71,95 84,84 L86,91 Q73,102 54,103 Q35,102 22,91 Z" />
+    <!-- Broad steel mask with readable brow, eyes and mouth at launcher size. -->
+    <path android:fillColor="#1A2928"
+        android:pathData="M36,31 L72,31 L78,40 L76,67 L66,80 L54,85 L42,80 L32,67 L30,40 Z" />
+    <path android:fillColor="#B4C4BF"
+        android:pathData="M38,34 L70,34 L74,41 L72,65 L64,77 L54,81 L44,77 L36,65 L34,41 Z" />
+    <path android:fillColor="#E4E9E2"
+        android:pathData="M38,35 L53,34 L52,75 L44,75 L37,64 L35,42 Z" />
+    <path android:fillColor="#738E86"
+        android:pathData="M56,34 L70,35 L73,42 L71,64 L64,75 L56,79 Z" />
+    <path android:fillColor="#70827D"
+        android:pathData="M34,43 L74,43 L70,48 L38,48 Z" />
+    <path android:fillColor="#142721"
+        android:pathData="M38,50 L50,49 L49,55 L40,56 Z" />
+    <path android:fillColor="#142721"
+        android:pathData="M58,49 L70,50 L68,56 L59,55 Z" />
+    <path android:fillColor="#83F4A1" android:pathData="M41,52 L48,51 L47,53 L41,54 Z" />
+    <path android:fillColor="#83F4A1" android:pathData="M60,51 L67,52 L67,54 L61,53 Z" />
+    <path android:fillColor="#536E65"
+        android:pathData="M51,51 L57,51 L59,66 L54,69 L49,66 Z" />
+    <path android:fillColor="#182B25"
+        android:pathData="M43,70 L65,70 L63,75 L45,75 Z" />
+    <path android:fillColor="#89A29A" android:pathData="M46,72 L62,72 L61,73 L47,73 Z" />
+    <path android:fillColor="#6C8C7B" android:pathData="M31,39 L35,36 L36,66 L33,62 Z" />
+    <path android:fillColor="#456F57" android:pathData="M72,36 L77,40 L75,63 L72,66 Z" />
+</vector>

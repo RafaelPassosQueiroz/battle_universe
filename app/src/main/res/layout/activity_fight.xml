@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fight_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#17111D">
+    <FrameLayout
+        android:id="@+id/fight_stage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+    <LinearLayout
+        android:id="@+id/fight_hud"
+        android:layout_width="match_parent"
+        android:layout_height="65dp"
+        android:layout_gravity="top"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:background="#DB25142E" />
+    <LinearLayout
+        android:id="@+id/fight_controls"
+        android:layout_width="match_parent"
+        android:layout_height="166dp"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="5dp"
+        android:background="@drawable/bg_fight_controls" />
+</FrameLayout>
