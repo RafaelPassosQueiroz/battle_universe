@@ -34,9 +34,9 @@ import com.example.projetomarvel.BattleEngine.Projectile;
 
 /** Native landscape arena. World dimensions and timings follow the HTML fight loop. */
 public class FightActivity extends Activity {
-    private static final float WORLD_W = 844f;
-    private static final float WORLD_H = 380f;
-    private static final float GROUND_Y = 270f;
+    private static final float WORLD_W = 1100f;
+    private static final float WORLD_H = 620f;
+    private static final float GROUND_Y = 426f;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BattleEngine battle;
@@ -48,6 +48,18 @@ public class FightActivity extends Activity {
     private Fighter playerFighter, botFighter;
     private FrameLayout stageFrame;
     private Arena arena;
+    private final BattleCamera camera=new BattleCamera();
+    private final AsgardScene scene=new AsgardScene();
+    private BattleHud nativeHud;
+    private BattleVfx nativeEffects;
+    private final java.util.WeakHashMap<Fighter,FighterVisual> visualStates=new java.util.WeakHashMap<>();
+    private float visualClock,accumulator,hitStop,countdownRemaining,noteRemaining;
+    private String note="";
+    private int blocks,visualRevision;
+    private FrameLayout pauseOverlay;
+    private boolean manualPaused,soundOn,lastSkillActive;
+    private android.media.ToneGenerator tone;
+
     private TextView playerHealth, botHealth, status;
     private ProgressBar playerBar, botBar;
     private String player, bot, storyPower="Energia";
@@ -120,6 +132,8 @@ public class FightActivity extends Activity {
         hud.addView(vs, new LinearLayout.LayoutParams(dp(66), -1));
         hud.addView(healthColumn(worldMode&&worldBotLabel!=null?worldBotLabel:bot, false), new LinearLayout.LayoutParams(0, -1, 1));
 
+        hud.setVisibility(View.GONE);
+        nativeHud=new BattleHud(this);nativeEffects=new BattleVfx(this);
         arena = new Arena();
         stageFrame.addView(arena, new FrameLayout.LayoutParams(-1, -1));
         status = label("3", 14, 0xffffffff);
@@ -132,19 +146,20 @@ public class FightActivity extends Activity {
         FrameLayout.LayoutParams statusLp = new FrameLayout.LayoutParams(
                 dp(118), dp(31), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         statusLp.topMargin = dp(68);
+        status.setVisibility(View.INVISIBLE);
         stageFrame.addView(status, statusLp);
-        Button exit = action("Sair", 0xff100c18);
-        exit.setTextSize(12);
-        GradientDrawable exitBg = new GradientDrawable();
-        exitBg.setColor(0xb8100c18);
-        exitBg.setCornerRadius(dp(12));
-        exitBg.setStroke(dp(1), 0x88ffffff);
-        exit.setBackground(exitBg);
-        FrameLayout.LayoutParams exitLp = new FrameLayout.LayoutParams(
-                dp(58), dp(32), Gravity.TOP | Gravity.RIGHT);
-        exitLp.setMargins(0, dp(72), dp(12), 0);
-        stageFrame.addView(exit, exitLp);
-        exit.setOnClickListener(v -> returnToCaller(false));
+        FrameLayout fightSurface=findViewById(R.id.fight_root);
+        fightSurface.setOnApplyWindowInsetsListener((v,insets)->{
+            int left=insets.getSystemWindowInsetLeft(),top=insets.getSystemWindowInsetTop(),right=insets.getSystemWindowInsetRight(),bottom=insets.getSystemWindowInsetBottom();
+            if(android.os.Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){android.view.DisplayCutout cut=insets.getDisplayCutout();left=Math.max(left,cut.getSafeInsetLeft());top=Math.max(top,cut.getSafeInsetTop());right=Math.max(right,cut.getSafeInsetRight());bottom=Math.max(bottom,cut.getSafeInsetBottom());}
+            v.setPadding(left,top,right,bottom);return insets;
+        });
+        fightSurface.requestApplyInsets();
+        Button sound=toolbarButton("♪","Ativar som",86);
+        sound.setOnClickListener(v->{soundOn=!soundOn;sound.setText(soundOn?"♫":"♪");sound.setContentDescription(soundOn?"Desativar som":"Ativar som");if(soundOn){if(tone==null)tone=new android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC,25);tone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP,60);}});
+        Button fullscreen=toolbarButton("⛶","Tela cheia",49);
+        fullscreen.setOnClickListener(v->{int flags=getWindow().getDecorView().getSystemUiVisibility();boolean full=(flags&View.SYSTEM_UI_FLAG_FULLSCREEN)!=0;getWindow().getDecorView().setSystemUiVisibility(full?View.SYSTEM_UI_FLAG_VISIBLE:View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);});
+        Button pause=toolbarButton("Ⅱ","Pausar luta",12);pause.setOnClickListener(v->showPause());
 
         FrameLayout movement = new FrameLayout(this);
         movement.setTranslationX(dp(35));
@@ -215,15 +230,14 @@ public class FightActivity extends Activity {
                 long now = System.nanoTime();
                 float dt = previousFrame == 0 ? 0 : Math.min((now - previousFrame) / 1_000_000_000f, .05f);
                 previousFrame = now;
-                if (active && !over && !paused) step(dt);
-                else if (!paused) {
-                    effectTime = Math.max(0, effectTime - dt);
-                    damageTime = Math.max(0, damageTime - dt);
-                    dustTime = Math.max(0, dustTime - dt);
-                    if (playerFighter != null)
-                        playerFighter.hitTime = Math.max(0, playerFighter.hitTime - dt);
-                    if (botFighter != null)
-                        botFighter.hitTime = Math.max(0, botFighter.hitTime - dt);
+                if(!paused){
+                    visualClock+=dt;nativeEffects.update(dt);effectTime=Math.max(0,effectTime-dt);damageTime=Math.max(0,damageTime-dt);dustTime=Math.max(0,dustTime-dt);noteRemaining=Math.max(0,noteRemaining-dt);
+                    if(countdownRemaining>0){countdownRemaining=Math.max(0,countdownRemaining-dt);status.setText(countdownRemaining>.7f?String.valueOf(Math.max(1,(int)Math.ceil((countdownRemaining-.7f)/.7f))):"LUTEM!");if(countdownRemaining==0&&!over){active=true;status.setText("Em combate");}}
+                    else if(active&&!over){
+                        hitStop=Math.max(0,hitStop-dt);
+                        if(hitStop==0){accumulator+=dt;int steps=0;while(accumulator>=1f/120&&steps++<8){step(1f/120);accumulator-=1f/120;if(over||hitStop>0){accumulator=0;break;}}}
+                    }
+                    if(battle!=null)camera.update(dt,battle.player,battle.bot);
                 }
                 arena.invalidate();
                 updateAttackButtons();
@@ -349,22 +363,21 @@ public class FightActivity extends Activity {
         playerFighter=battle.player;botFighter=battle.bot;projectiles=battle.projectiles;
         backwardHeld=forwardHeld=jumpRequested=jumpHeld=over=active=false;
         hits=0;effectTime=damageTime=dustTime=0;previousFrame=0;lastSpecialState="";
+        paused=manualPaused=false;visualClock=accumulator=hitStop=countdownRemaining=noteRemaining=0;blocks=0;visualRevision=0;lastSkillActive=false;note="";visualStates.clear();nativeEffects.clear();camera.reset(playerFighter,botFighter);nativeHud.reset();
         updateHealth();updateAttackButtons();arena.invalidate();
     }
 
-    private void countdown(int n) {
-        if(over)return;
-        if(n>0){status.setText(String.valueOf(n));handler.postDelayed(()->countdown(n-1),700);}
-        else{status.setText("LUTE!");handler.postDelayed(()->{
-            if(!over){active=true;previousFrame=0;status.setText("Em combate");}
-        },650);}
-    }
+    private void countdown(int n) {if(over)return;countdownRemaining=n*.7f+.7f;active=false;status.setText(String.valueOf(n));}
 
     private void step(float dt) {
-        effectTime=Math.max(0,effectTime-dt);damageTime=Math.max(0,damageTime-dt);
         if(jumpRequested){battle.jump(playerFighter);jumpRequested=false;}
         battle.step(dt,(forwardHeld?1:0)-(backwardHeld?1:0),jumpHeld,true);
+        if(battle.revision!=visualRevision){visualRevision=battle.revision;visualStates.clear();nativeEffects.clear();hitStop=0;note="VIAGEM NO TEMPO";noteRemaining=1.5f;camera.impact(.6);}
         for(BattleEngine.Hit hit:battle.hits){
+            nativeEffects.hit(hit,storyColor);
+            if(hit.damage>0){hitStop=Math.max(hitStop,hit.damage>=10?.045f:.032f);camera.impact(hit.damage>=10?1.7:.9);}
+            if(hit.guarded&&hit.target==playerFighter)blocks++;
+            if(soundOn&&tone!=null)tone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP,35);
             effectX=damageX=hit.target.x;effectY=damageY=hit.target.y;
             effectColor=specialColor(hit.attacker==playerFighter?player:bot);
             effectTime=.42f;damageTime=hit.damage>0||hit.guarded||hit.blocked?.8f:0;
@@ -375,7 +388,10 @@ public class FightActivity extends Activity {
                     playerFighter.frozen>0?"CONGELADO":Math.min(playerFighter.hp,botFighter.hp)<=30?
                     "Vida crítica":"Em combate");
         }
-        battle.hits.clear();updateHealth();
+        battle.hits.clear();
+        if(playerFighter.specialActive&&!lastSkillActive){nativeEffects.burst(playerFighter.x,playerFighter.y+100,BattleVfx.energy(playerFighter,storyColor),14,70);note=playerFighter.custom?storyPower.toUpperCase(java.util.Locale.ROOT):BattleRoster.find(BattleRoster.id(player)).special.toUpperCase(java.util.Locale.ROOT);noteRemaining=1;}
+        lastSkillActive=playerFighter.specialActive;
+        updateHealth();
         if(battle.over)finishFight(battle.victory);
     }
 
@@ -388,6 +404,8 @@ public class FightActivity extends Activity {
         playerBar.setProgress(Math.round(playerFighter.hp));botBar.setProgress(Math.round(botFighter.hp));
         playerBar.setProgressTintList(ColorStateList.valueOf(healthColor(playerFighter.hp/playerFighter.maxHp*100)));
         botBar.setProgressTintList(ColorStateList.valueOf(healthColor(botFighter.hp/botFighter.maxHp*100)));
+        String accessibility=player+", "+Math.round(playerFighter.hp)+" de "+Math.round(playerFighter.maxHp)+" de vida. Adversário: "+(worldBotLabel!=null?worldBotLabel:bot)+", "+Math.round(botFighter.hp)+" de "+Math.round(botFighter.maxHp)+" de vida.";
+        if(!accessibility.contentEquals(arena.getContentDescription()==null?"":arena.getContentDescription()))arena.setContentDescription(accessibility);
     }
 
     private int healthColor(float percent){return percent<=25?0xfff3475a:percent<=50?0xffffc632:0xff45dc87;}
@@ -427,6 +445,9 @@ public class FightActivity extends Activity {
         playerFighter.knockedOut = !victory;
         botFighter.knockedOut = victory;
         if(playerFighter.dusted||botFighter.dusted)dustTime=1.1f;
+        note=playerFighter.dusted||botFighter.dusted?"O ESTALO":"K.O.";noteRemaining=.9f;
+        Fighter defeated=victory?botFighter:playerFighter;
+        nativeEffects.burst(defeated.x,defeated.y+90,BattleVfx.energy(defeated,storyColor),30,115);
         status.setText("Fim da luta");
         if (storyBattle < 0 && !worldMode) {
             android.content.SharedPreferences record = getSharedPreferences("battle_record", 0);
@@ -437,77 +458,31 @@ public class FightActivity extends Activity {
     }
 
     private void showResult(boolean victory) {
-        if (isFinishing()) return;
-        FrameLayout overlay = new FrameLayout(this);
-        overlay.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{0xf5090712,0xe21e111b,0xc3422618}));
-        LinearLayout composition = new LinearLayout(this);
-        composition.setGravity(Gravity.CENTER_VERTICAL);
-        composition.setPadding(dp(26),dp(15),dp(22),dp(15));
-        overlay.addView(composition,new FrameLayout.LayoutParams(-1,-1));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setGravity(Gravity.CENTER_VERTICAL);
-        composition.addView(copy,new LinearLayout.LayoutParams(0,-1,1.45f));
-        TextView title = label(victory ? "VITÓRIA" : "DERROTA", 66,
-                victory ? 0xffffca4d : 0xffff526c);
-        title.setTypeface(Typeface.create(Typography.bebas(this), Typeface.ITALIC));
-        title.setShadowLayer(dp(12),0,dp(4),victory?0x99ff8718:0x99ef264a);
-        copy.addView(title);
-        TextView description=label(victory ? player+" venceu "+bot+"."
-                : bot+" venceu "+player+".",19,0xffffffff);
-        copy.addView(description);
-        LinearLayout stats=new LinearLayout(this);
-        stats.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams statsLp=new LinearLayout.LayoutParams(-1,-2);
-        statsLp.topMargin=dp(12);
-        statsLp.bottomMargin=dp(20);
-        copy.addView(stats,statsLp);
-        TextView hp=label(Math.round(playerFighter.hp)+" HP",29,0xffffffff);
-        hp.setTypeface(Typography.bebas(this));
-        stats.addView(hp);
-        TextView hpLabel=label("  vida restante      ",13,0xffd4c8c2);
-        stats.addView(hpLabel);
-        TextView count=label(String.valueOf(hits),29,0xffffffff);
-        count.setTypeface(Typography.bebas(this));
-        stats.addView(count);
-        stats.addView(label("  golpes certeiros",13,0xffd4c8c2));
-        LinearLayout row = new LinearLayout(this);
-        Button retry = action(victory ? "Lutar novamente" : "Tentar novamente", 0xffa64627);
-        Button back = action(worldMode?"Voltar ao mundo":storyBattle >= 0
-                ? (victory ? "Continuar história" : "Voltar à história")
-                : "Voltar às lutas", 0xff34303a);
-        GradientDrawable orange=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{0xffffaa20,0xffff711e});
-        orange.setCornerRadius(dp(16));
-        retry.setBackground(orange);
-        retry.setTextColor(0xff241106);
-        LinearLayout.LayoutParams retryLp=new LinearLayout.LayoutParams(0,dp(54),1);
-        row.addView(retry,retryLp);
-        GradientDrawable outline=new GradientDrawable();
-        outline.setColor(0x55252027);
-        outline.setCornerRadius(dp(16));
-        outline.setStroke(dp(1),0x99ffffff);
-        back.setBackground(outline);
-        LinearLayout.LayoutParams backLp=new LinearLayout.LayoutParams(0,dp(54),1);
-        backLp.leftMargin=dp(10);
-        row.addView(back,backLp);
-        copy.addView(row,new LinearLayout.LayoutParams(-1,-2));
-        FighterArtView figure=(storyBattle>=0||worldMode&&storySkin>=0)
-                ?new FighterArtView(this,player,false,storyColor,storySkin,storyBuild,storyHair,storyStyle)
-                :new FighterArtView(this,player,false);
-        if(storySkin>=0)figure.setPower(storyPower);
-        figure.setPose(victory?FighterArtView.POSE_VICTORY:FighterArtView.POSE_KO);
-        composition.addView(figure,new LinearLayout.LayoutParams(0,-1,.8f));
-        FrameLayout screen=(FrameLayout)findViewById(android.R.id.content);
-        screen.addView(overlay,new FrameLayout.LayoutParams(-1,-1));
-        retry.setOnClickListener(v -> {
-            screen.removeView(overlay);
-            resetFight();
-            countdown(3);
-        });
-        back.setOnClickListener(v -> returnToCaller(victory));
+        if(isFinishing())return;
+        FrameLayout screen=findViewById(R.id.fight_root);
+        final FrameLayout[] card=new FrameLayout[1];
+        Runnable retry=()->{screen.removeView(card[0]);resetFight();countdown(3);};
+        String back=worldMode?"VOLTAR AO MUNDO":storyBattle>=0?(victory?"CONTINUAR HISTÓRIA":"VOLTAR À HISTÓRIA"):"VOLTAR ÀS LUTAS";
+        card[0]=FightPanels.result(this,victory,victory?player:worldMode&&worldBotLabel!=null?worldBotLabel:bot,battle.time,playerFighter.hp,hits,blocks,retry,storyBattle<0&&!worldMode?this::returnToSelection:null,back,()->returnToCaller(victory));
+        screen.addView(card[0],new FrameLayout.LayoutParams(-1,-1));
     }
+
+    private Button toolbarButton(String glyph,String description,int right){
+        Button b=action(glyph,0xff173247);b.setTextSize(16);b.setContentDescription(description);
+        GradientDrawable bg=new GradientDrawable();bg.setColor(0xc9173247);bg.setCornerRadius(dp(4));bg.setStroke(dp(1),0x55b5bb96);b.setBackground(bg);
+        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(28),dp(28),Gravity.TOP|Gravity.RIGHT);lp.setMargins(0,dp(72),dp(right),0);stageFrame.addView(b,lp);return b;
+    }
+    private void clearHeld(){backwardHeld=forwardHeld=jumpHeld=jumpRequested=false;if(playerFighter!=null)battle.guard(playerFighter,false);}
+    private void resumeFight(){if(pauseOverlay!=null){((FrameLayout)findViewById(R.id.fight_root)).removeView(pauseOverlay);pauseOverlay=null;}manualPaused=paused=false;previousFrame=0;clearHeld();}
+    private void showPause(){
+        if(over||manualPaused)return;manualPaused=paused=true;clearHeld();
+        FrameLayout root=findViewById(R.id.fight_root);
+        pauseOverlay=FightPanels.pause(this,this::resumeFight,()->{resumeFight();resetFight();countdown(3);},storyBattle<0&&!worldMode?this::returnToSelection:null,()->returnToCaller(false));
+        root.addView(pauseOverlay,new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void returnToSelection(){Intent result=new Intent();result.putExtra("battle_select_again",true);setResult(RESULT_OK,result);finish();}
+
+
 
     private String specialMove(String hero) {
         if (hero.contains("Aranha")) return "Teia";
@@ -538,14 +513,14 @@ public class FightActivity extends Activity {
         }
         if(worldMode){Intent result=new Intent();result.putExtra("world_encounter",worldEncounter);
             result.putExtra("world_victory",victory);setResult(RESULT_OK,result);}
-        else setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        // The parent Activity restores its own portrait or landscape orientation.
         finish();
     }
 
-    @Override public void onBackPressed() { returnToCaller(false); }
+    @Override public void onBackPressed() {if(over)returnToCaller(battle.victory);else if(manualPaused)resumeFight();else showPause();}
     @Override protected void onResume() {
         super.onResume();
-        paused = false;
+        paused = manualPaused;
         previousFrame = 0;
     }
     @Override protected void onPause() {
@@ -557,6 +532,7 @@ public class FightActivity extends Activity {
     }
     @Override protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        if(tone!=null)tone.release();
         super.onDestroy();
     }
 
@@ -566,114 +542,40 @@ public class FightActivity extends Activity {
         Arena() { super(FightActivity.this); }
 
         @Override protected void onDraw(Canvas actual) {
-            super.onDraw(actual);
-            actual.save();
-            float scale=Math.min(getWidth()/WORLD_W,getHeight()/WORLD_H);
-            actual.translate((getWidth()-WORLD_W*scale)/2f,
-                    (getHeight()-WORLD_H*scale)/2f);
-            actual.scale(scale,scale);
-            if(battle!=null&&battle.shake>0)
-                actual.translate((float)Math.sin(battle.time*120)*2.8f*battle.shake/.18f,0);
-            drawBackdrop(actual);
-            CombatEffects.drawWorld(actual,battle,GROUND_Y,storyColor,paint);
-            drawProjectiles(actual);
-            drawFighter(actual, playerFighter, player,
-                    storyBattle >= 0 || worldMode&&storySkin>=0 ? storyColor : -1);
-            drawFighter(actual, botFighter, bot, -1);
-            for(Fighter owner:new Fighter[]{playerFighter,botFighter})if(owner.ally!=null&&owner.ally.hp>0)
-                CombatEffects.drawAlly(actual,owner.ally,GROUND_Y,paint);
-            drawImpact(actual);
-            actual.restore();
-        }
-
-        private void drawBackdrop(Canvas canvas) {
-            int[] colors = storyBattle == 2
-                    ? new int[]{0xff101a22, 0xff254b3c, 0xff07110d}
-                    : storyBattle >= 0
-                    ? new int[]{0xff101a36, 0xff5b3a67, 0xffc78598}
-                    : new int[]{0xff1a1030, 0xff6b2942, 0xfff0a03c};
-            paint.setShader(new LinearGradient(0, 0, 0, WORLD_H, colors,
-                    null, Shader.TileMode.CLAMP));
-            canvas.drawRect(0, 0, WORLD_W, WORLD_H, paint);
-            int glow=storyBattle==2?0x6679ed91:0xb7ffa353;
-            paint.setShader(new RadialGradient(WORLD_W*.5f, GROUND_Y+18f, 190,
-                    glow, 0x00ffa353, Shader.TileMode.CLAMP));
-            canvas.drawRect(0, 45, WORLD_W, GROUND_Y, paint);
-            paint.setShader(null);
-            paint.setColor(storyBattle==2?0x553b7050:0x664a2447);
-            for(int i=0;i<7;i++){
-                float cx=55+i*129,cy=103+(i%3)*27;
-                canvas.drawRoundRect(cx-34,cy,cx+44,cy+7,7,7,paint);
-                canvas.drawRoundRect(cx-6,cy-5,cx+20,cy+4,6,6,paint);
+            super.onDraw(actual);if(battle==null)return;
+            actual.drawColor(0xff142e46);actual.save();
+            float scale=getWidth()/WORLD_W;
+            actual.translate(0,(getHeight()-WORLD_H*scale)*.58f);actual.scale(scale,scale);
+            VectorCanvas c=new VectorCanvas(actual);scene.background(c,camera,visualClock);scene.world(c,camera,visualClock);
+            actual.save();camera.apply(actual);actual.translate(0,-GROUND_Y);
+            BattleVfx.abilities(actual,battle,GROUND_Y,visualClock,storyColor);drawProjectiles(actual);
+            drawFighter(actual,playerFighter,player,storySkin>=0?storyColor:-1);
+            drawFighter(actual,botFighter,bot,-1);
+            for(Fighter owner:new Fighter[]{playerFighter,botFighter})if(owner.ally!=null&&owner.ally.hp>0){
+                drawFighter(actual,owner.ally,owner.ally.name,owner.custom?storyColor:-1);
+                paint.setColor(0xff282035);actual.drawRoundRect(owner.ally.x-17,GROUND_Y-owner.ally.y-157,owner.ally.x+17,GROUND_Y-owner.ally.y-154,1,1,paint);
+                paint.setColor(0xffef6f96);actual.drawRect(owner.ally.x-17,GROUND_Y-owner.ally.y-157,owner.ally.x-17+34*owner.ally.hp/owner.ally.maxHp,GROUND_Y-owner.ally.y-154,paint);
             }
-            float width = WORLD_W / skyline.length;
-            paint.setColor(storyBattle==2?0xff183126:0xff2a1638);
-            for (int i = 0; i < skyline.length; i++) {
-                canvas.drawRect(i * width, GROUND_Y - skyline[i] * .63f,
-                        (i + 1) * width + 1, GROUND_Y, paint);
-            }
-            paint.setColor(storyBattle==2?0xff0b2118:0xff180e24);
-            for (int i = 0; i < skyline.length; i += 2) {
-                canvas.drawRect(i * width + width * .35f,
-                        GROUND_Y - skyline[(i + 3) % skyline.length] * .43f,
-                        (i + 1) * width + width * .65f, GROUND_Y, paint);
-            }
-            Path tower = new Path();
-            tower.moveTo(615, GROUND_Y);
-            tower.lineTo(615, 168);
-            tower.lineTo(630, 168);
-            tower.lineTo(650, 79);
-            tower.lineTo(670, 168);
-            tower.lineTo(685, 168);
-            tower.lineTo(685, GROUND_Y);
-            tower.close();
-            canvas.drawPath(tower, paint);
-            paint.setShader(new LinearGradient(0,GROUND_Y,0,WORLD_H,
-                    storyBattle==2?0xff263a2a:0xff352238,
-                    storyBattle==2?0xff08130d:0xff110b1b,Shader.TileMode.CLAMP));
-            canvas.drawRect(0,GROUND_Y,WORLD_W,WORLD_H,paint);
-            paint.setShader(null);
-            paint.setColor(storyBattle==2?0x667dba80:0x665d4059);
-            paint.setStrokeWidth(1);
-            for(int y=(int)GROUND_Y+20;y<WORLD_H;y+=25)
-                canvas.drawLine(0,y,WORLD_W,y,paint);
-            for(int row=0;row<4;row++)for(int col=0;col<12;col++){
-                float sx=col*76+(row%2)*31,sy=GROUND_Y+9+row*27;
-                canvas.drawRect(sx,sy,sx+23+(col%3)*7,sy+3,paint);
-            }
-            paint.setColor(storyBattle == 2 ? 0xff7bfd8a : 0xffffac21);
-            canvas.drawRect(0, GROUND_Y, WORLD_W, GROUND_Y+3, paint);
+            nativeEffects.draw(actual,GROUND_Y);actual.restore();actual.restore();
+            String announcement=countdownRemaining>0?status.getText().toString():noteRemaining>0?note:"";
+            nativeHud.draw(actual,getWidth(),getHeight(),battle,camera,player,worldMode&&worldBotLabel!=null?worldBotLabel:bot,announcement,.016);
         }
 
         private void drawFighter(Canvas canvas, Fighter fighter, String hero,
                                  int overridePrimary) {
-            boolean mirrored=fighter.dir<0;
-            boolean scripted=fighter.specialActive&&fighter.skill!=BattleEngine.Skill.CAPTAIN
-                    &&fighter.skill!=BattleEngine.Skill.SCARLET
-                    &&fighter.skill!=BattleEngine.Skill.STRENGTH;
-            int pose=fighter.knockedOut?FighterArtView.POSE_KO:
-                    scripted?CombatEffects.specialPose(fighter):
-                    fighter.frozen>0?FighterArtView.POSE_GUARD:
-                    fighter.hitTime>0?FighterArtView.POSE_HIT:
-                    fighter.attack>=0?fighter.attack==0?FighterArtView.POSE_PUNCH:
-                    fighter.attack==1?FighterArtView.POSE_KICK:FighterArtView.POSE_BLAST:
-                    battle.guarding(fighter)||(fighter.specialActive&&fighter.skill==BattleEngine.Skill.CAPTAIN)?FighterArtView.POSE_GUARD:
-                    fighter.y>0?FighterArtView.POSE_JUMP:
-                    fighter.moving?FighterArtView.POSE_WALK:FighterArtView.POSE_IDLE;
-            float phase=fighter.attack>=0?fighter.attackTime/fighter.attackDuration:
-                    fighter.specialActive?Math.min(1,fighter.specialTime/Math.min(1,fighter.specialDuration)):fighter.walkTime;
-            int dustAlpha=fighter.dusted?Math.round(255*Math.max(0,Math.min(1,(dustTime-.15f)/.95f))):255;
-            int layer=canvas.saveLayerAlpha(0,0,WORLD_W,WORLD_H,
-                    fighter.specialActive&&fighter.skill==BattleEngine.Skill.NINJA?100:
-                            fighter.specialActive&&fighter.skill==BattleEngine.Skill.MARVEL?90:dustAlpha);
-            float artScale=fighter.custom?.72f:FighterArtView.visualScale(hero);
-            if(fighter.skill==BattleEngine.Skill.GENERIC)WorldEnemyArt.draw(canvas,fighter.x,GROUND_Y-fighter.y,mirrored,worldGenericKind,pose,phase);
-            else if(fighter.custom)FighterArtView.drawPowered(canvas,fighter.x,GROUND_Y-fighter.y,
-                    artScale,hero,mirrored,overridePrimary,pose,phase,
-                    storySkin,storyBuild,storyHair,storyStyle,storyPower);
-            else FighterArtView.drawAnimated(canvas,fighter.x,GROUND_Y-fighter.y,
-                    artScale,hero,mirrored,overridePrimary,pose,phase);
-            canvas.restoreToCount(layer);
+            FighterVisual visual=visualStates.get(fighter);
+            if(visual==null){
+                visual=new FighterVisual(hero);
+                if(fighter.custom||fighter.master!=null&&fighter.master.custom)visual.configure(storyColor,storySkin,storyBuild,storyHair,storyStyle,storyPower);
+                else if(fighter.skill==BattleEngine.Skill.GENERIC)visual.generic(worldGenericKind);
+                else if(visual.id.equals("doombot"))visual.generic("doombot");
+                visualStates.put(fighter,visual);
+            }
+            visual.sync(fighter,visualClock);visual.victory=over&&!fighter.knockedOut;
+            visual.alpha=fighter.master!=null?.55:fighter.specialActive&&fighter.skill==BattleEngine.Skill.NINJA?.4:1;
+            visual.shieldAway=false;visual.hammerAway=false;
+            for(Projectile shot:projectiles)if(shot.owner==fighter){if(shot.boomerang)visual.shieldAway=true;if(shot.thorHammer)visual.hammerAway=true;}
+            NativeFighterArt.draw(canvas,visual,fighter.x,GROUND_Y-fighter.y,.72,visualClock);
             if(fighter.dusted&&dustTime>0){
                 float spread=1-dustTime/1.1f;
                 paint.setColor(0xffc9b594);paint.setAlpha(Math.round(dustTime/1.1f*210));
@@ -684,19 +586,10 @@ public class FightActivity extends Activity {
                 }
                 paint.setAlpha(255);
             }
-            CombatEffects.drawStatus(canvas,battle,fighter,GROUND_Y,specialColor(hero),paint);
+            BattleVfx.status(canvas,fighter,GROUND_Y,visualClock,storyColor);
         }
 
-        private void drawProjectiles(Canvas canvas) {
-            if(projectiles==null)return;
-            for(Projectile projectile:projectiles){
-                if(!projectile.style.equals("common"))CombatEffects.drawProjectile(canvas,projectile,GROUND_Y,paint);
-                else if(projectile.owner.custom)AttackEffects.drawCustom(canvas,projectile.x,GROUND_Y-projectile.y,
-                        projectile.direction,storyPower,storyColor,paint);
-                else AttackEffects.draw(canvas,projectile.x,GROUND_Y-projectile.y,
-                        projectile.direction,projectile.owner.name,paint);
-            }
-        }
+        private void drawProjectiles(Canvas canvas) {if(projectiles!=null)for(Projectile shot:projectiles)BattleVfx.projectile(canvas,shot,GROUND_Y,visualClock,storyColor);}
 
         private void drawImpact(Canvas canvas) {
             if (effectTime > 0) {
@@ -725,7 +618,7 @@ public class FightActivity extends Activity {
                 paint.setTextSize(29);
                 String text = defendedHit ? "DEFESA" : "-" + damageValue;
                 canvas.drawText(text, damageX - paint.measureText(text) / 2f,
-                        125 - damageY - progress * 28f, paint);
+                        GROUND_Y-145 - damageY - progress * 28f, paint);
                 paint.setAlpha(255);
             }
         }

@@ -4,9 +4,10 @@ package com.example.projetomarvel;
 import java.util.ArrayList;
 import java.util.Random;
 
-/** Simulation for the existing fixed arena. No Android dependencies: combat can be checked deterministically. */
+/** Simulation for the shared 2,600-unit scrolling arena. No Android dependencies: combat can be checked deterministically. */
 final class BattleEngine {
-    static final float WIDTH=844, EDGE=55;
+    static final float WIDTH=2600, EDGE=55;
+    static final float RETURNING_POWER_RANGE=844f/3f-48;
     static final float[] DURATIONS={.28f,.40f,.50f};
     static final float[] COOLDOWNS={.38f,.70f,1.25f};
     enum Skill { SPIDER, IRON, WOLVERINE, CAPTAIN, THOR, HULK, PANTHER, STRANGE,
@@ -126,7 +127,7 @@ final class BattleEngine {
     }
     BattleEngine(String playerName,String botName,String power,boolean custom,int difficulty,
                  int storyBattle,boolean storyTech,long seed,boolean genericBot){
-        player=new Fighter(playerName,power,custom,220);bot=new Fighter(botName,null,false,624,genericBot);
+        player=new Fighter(playerName,power,custom,1100);bot=new Fighter(botName,null,false,1500,genericBot);
         this.difficulty=difficulty;this.storyBattle=storyBattle;this.storyTech=storyTech;
         random=new Random(seed);face();
     }
@@ -570,8 +571,8 @@ final class BattleEngine {
                 Projectile p=shoot(f,commonDamage(f),f.skill==Skill.SPIDER?690:f.skill==Skill.SPEED?740:
                         f.skill==Skill.ENERGY&&f.custom?772.8f:560,0,"common");
                 p.slow=f.skill==Skill.SPIDER;
-                if(f.skill==Skill.THOR){p.maxDistance=WIDTH/3-48;p.thorHammer=true;}
-                if(f.skill==Skill.CAPTAIN){p.maxDistance=WIDTH/3-48;p.boomerang=true;}
+                if(f.skill==Skill.THOR){p.maxDistance=RETURNING_POWER_RANGE;p.thorHammer=true;}
+                if(f.skill==Skill.CAPTAIN){p.maxDistance=RETURNING_POWER_RANGE;p.boomerang=true;}
                 break;
         }
     }

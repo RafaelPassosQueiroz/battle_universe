@@ -3,7 +3,7 @@
     android:id="@+id/fight_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#17111D">
+    android:background="#142E46">
     <FrameLayout
         android:id="@+id/fight_stage"
         android:layout_width="match_parent"
