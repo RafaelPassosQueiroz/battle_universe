@@ -21,10 +21,10 @@ public final class SplashCinematicView extends View {
     @Override protected void onDraw(Canvas c){
         super.onDraw(c);float w=getWidth(),h=getHeight();if(w==0||h==0)return;
         float t=Math.min(1.85f,(SystemClock.uptimeMillis()-start)/1000f);
-        paint.setShader(new LinearGradient(0,0,w,h,new int[]{0xff091622,0xff171819,0xff1b0c10},
+        paint.setShader(new LinearGradient(0,0,w,h,new int[]{0xff142e46,0xff1d394c,0xff122638},
                 null,Shader.TileMode.CLAMP));c.drawRect(0,0,w,h,paint);
-        glow(c,w*.16f,h*.48f,w*.65f,0x663e8abe,w,h);
-        glow(c,w*.84f,h*.48f,w*.65f,0x667d2527,w,h);
+        glow(c,w*.16f,h*.48f,w*.65f,0x664b9dba,w,h);
+        glow(c,w*.84f,h*.48f,w*.65f,0x667e7149,w,h);
         float scale=Math.min(w/225f,h*.58f/200f),feet=h*.79f;
         float left=ease(segment(t,0,.52f)),right=ease(segment(t,.12f,.65f));
         hero(c,w*(.20f-.06f*(1-left)),feet,scale,"Capitão América",false,left);

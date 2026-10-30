@@ -22,6 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ProjetoMarvel"
+rootProject.name = "Battle Universe"
 include(":app")
- 
